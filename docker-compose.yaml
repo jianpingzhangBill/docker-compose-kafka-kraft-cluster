@@ -1,0 +1,107 @@
+version: '2'
+
+x-tpl:
+  kafka-common: &kafka-common
+    image: 'bitnami/kafka:3.6'
+    ports: 
+      - 9092
+
+  environment: &environment
+    KAFKA_KRAFT_CLUSTER_ID: abcdefghijklmnopqrstuv
+    KAFKA_CFG_PROCESS_ROLES: "controller,broker"
+    KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "0@kafka-0:9093,1@kafka-1:9093,2@kafka-2:9093"
+    KAFKA_CFG_LISTENERS: "SASL_SSL://:9094,CONTROLLER://:9093,INTERNAL://:9092"
+    KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,SASL_SSL:SASL_SSL,INTERNAL:PLAINTEXT"
+    KAFKA_CFG_ADVERTISED_LISTENERS: "SASL_SSL://:9094,INTERNAL://9092"
+    KAFKA_CLIENT_LISTENER_NAME: "SASL_SSL"
+    KAFKA_CLIENT_USERS: "admin"
+    KAFKA_CLIENT_PASSWORDS: "admin-secret"
+    KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+    KAFKA_CFG_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+
+    # ssl
+    KAFKA_CERTIFICATE_PASSWORD: my_kafka_pass
+    KAFKA_TLS_TYPE: JKS # or PEM
+    KAFKA_CFG_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM: ""
+
+    # clusting
+    KAFKA_CFG_MESSAGE_MAX_BYTES: "20000000" 
+    KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: true
+    KAFKA_CFG_LOG_RETENTION_HOURS: 168
+    KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+    KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+    KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: 2
+
+services:
+  kafka-ui:
+    image: provectuslabs/kafka-ui:master
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL: PLAINTEXT
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka-0:9092
+      KAFKA_CLUSTERS_0_PROPERTIES_SASL_MECHANISM: PLAIN
+      # KAFKA_CLUSTERS_0_PROPERTIES_SASL_JAAS_CONFIG: 'org.apache.kafka.common.security.plain.PlainLoginModule required username="admin" password="admin-secret";'
+      AUTH_TYPE: "LOGIN_FORM"
+      SPRING_SECURITY_USER_NAME: admin
+      SPRING_SECURITY_USER_PASSWORD: pass
+
+  kafka-0:
+    <<: *kafka-common
+    environment: 
+      <<: *environment
+      KAFKA_CFG_NODE_ID: 0
+      KAFKA_CFG_ADVERTISED_LISTENERS: "SASL_SSL://:9094,INTERNAL://kafka-0:9092"
+    volumes:
+      - './keystore/kafka-0.server.keystore.jks:/opt/bitnami/kafka/config/certs/kafka.keystore.jks:ro'
+      - './truststore/kafka.truststore.jks:/opt/bitnami/kafka/config/certs/kafka.truststore.jks:ro'
+      - './data/kafka-0:/bitnami/kafka'
+
+  kafka-1:
+    <<: *kafka-common
+    environment: 
+      <<: *environment
+      KAFKA_CFG_NODE_ID: 1
+      KAFKA_CFG_ADVERTISED_LISTENERS: "SASL_SSL://:9094,INTERNAL://kafka-1:9092"
+    volumes:
+      - './keystore/kafka-1.server.keystore.jks:/opt/bitnami/kafka/config/certs/kafka.keystore.jks:ro'
+      - './truststore/kafka.truststore.jks:/opt/bitnami/kafka/config/certs/kafka.truststore.jks:ro'
+      - './data/kafka-1:/bitnami/kafka'
+  kafka-2:
+    <<: *kafka-common
+    environment: 
+      <<: *environment
+      KAFKA_CFG_NODE_ID: 2
+      KAFKA_CFG_ADVERTISED_LISTENERS: "SASL_SSL://:9094,INTERNAL://kafka-2:9092"
+    volumes:
+      - './keystore/kafka-2.server.keystore.jks:/opt/bitnami/kafka/config/certs/kafka.keystore.jks:ro'
+      - './truststore/kafka.truststore.jks:/opt/bitnami/kafka/config/certs/kafka.truststore.jks:ro'
+      - './data/kafka-2:/bitnami/kafka'
+
+
+  producer:
+    image: bitnami/python:3.9
+    container_name: producer
+    command: "sh -c 'pip install -r requirements.txt && python producer.py'"
+    environment:
+      BOOTSTRAP_SERVERS: kafka-0:9094,kafka-1:9094,kafka-2:9094
+      TOPIC_NAME: orders
+      TZ: Asia/Shanghai
+      SASL_USERNAME: admin
+      SASL_PASSWORD: admin-secret
+    volumes:
+      - .:/app
+  consumer:
+    image: bitnami/python:3.9
+    container_name: consumer
+    command: "sh -c 'pip install -r requirements.txt && python consumer.py'"
+    environment:
+      BOOTSTRAP_SERVERS: kafka-0:9094,kafka-1:9094,kafka-2:9094
+      TOPIC_NAME: orders
+      GROUP_ID: orders-group
+      TZ: Asia/Shanghai
+      SASL_USERNAME: admin
+      SASL_PASSWORD: admin-secret
+    volumes:
+      - .:/app

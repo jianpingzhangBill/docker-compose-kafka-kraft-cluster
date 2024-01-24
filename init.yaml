@@ -1,0 +1,12 @@
+version: "3.5"
+
+services:
+  init:
+    image: bitnami/kafka:3.6
+    container_name: init_kafka
+    volumes:
+    - ./:/certs
+    - ./generate.sh:/generate.sh
+    entrypoint: bash
+    working_dir: /certs
+    command: generate.sh
